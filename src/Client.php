@@ -153,10 +153,17 @@ class Client
 
     /**
      * Create a webhook.
+     *
+     * @param string     $url       Destination URL for webhook deliveries.
+     * @param array|null $rateLimit Optional rate limit: ['max_per_second' => int, 'max_per_minute' => int].
+     * @param array      $extra     Additional fields (topics, description, etc.).
      */
-    public function createWebhook(string $url, array $extra = []): array
+    public function createWebhook(string $url, ?array $rateLimit = null, array $extra = []): array
     {
         $body = array_merge(['url' => $url], $extra);
+        if ($rateLimit !== null) {
+            $body['rate_limit'] = $rateLimit;
+        }
         return $this->post('/api/v1/webhooks', $body);
     }
 
@@ -178,9 +185,16 @@ class Client
 
     /**
      * Update a webhook.
+     *
+     * @param string     $webhookId Webhook ID to update.
+     * @param array      $data      Fields to update (url, topics, description, etc.).
+     * @param array|null $rateLimit Optional rate limit: ['max_per_second' => int, 'max_per_minute' => int].
      */
-    public function updateWebhook(string $webhookId, array $data): array
+    public function updateWebhook(string $webhookId, array $data, ?array $rateLimit = null): array
     {
+        if ($rateLimit !== null) {
+            $data['rate_limit'] = $rateLimit;
+        }
         return $this->patch("/api/v1/webhooks/{$webhookId}", $data);
     }
 
@@ -206,6 +220,14 @@ class Client
     public function webhookTemplates(): array
     {
         return $this->get('/api/v1/webhooks/templates');
+    }
+
+    /**
+     * Send a test delivery to a webhook.
+     */
+    public function testWebhook(string $webhookId): array
+    {
+        return $this->post("/api/v1/webhooks/{$webhookId}/test", []);
     }
 
     // -------------------------------------------------------------------------
@@ -740,6 +762,70 @@ class Client
     }
 
     // -------------------------------------------------------------------------
+    // Embed Tokens
+    // -------------------------------------------------------------------------
+
+    /**
+     * List embed tokens.
+     */
+    public function listEmbedTokens(): array
+    {
+        return $this->get('/api/v1/embed/tokens');
+    }
+
+    /**
+     * Create an embed token.
+     */
+    public function createEmbedToken(array $config): array
+    {
+        return $this->post('/api/v1/embed/tokens', $config);
+    }
+
+    /**
+     * Revoke an embed token.
+     */
+    public function revokeEmbedToken(string $id): void
+    {
+        $this->doDelete("/api/v1/embed/tokens/{$id}");
+    }
+
+    // -------------------------------------------------------------------------
+    // Notification Channels
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the notification channel configuration.
+     */
+    public function getNotificationChannel(): array
+    {
+        return $this->get('/api/v1/notification-channels');
+    }
+
+    /**
+     * Create or update the notification channel configuration.
+     */
+    public function upsertNotificationChannel(array $config): array
+    {
+        return $this->request('PUT', '/api/v1/notification-channels', body: $config);
+    }
+
+    /**
+     * Delete the notification channel configuration.
+     */
+    public function deleteNotificationChannel(): void
+    {
+        $this->doDelete('/api/v1/notification-channels');
+    }
+
+    /**
+     * Test the notification channel configuration.
+     */
+    public function testNotificationChannel(): array
+    {
+        return $this->post('/api/v1/notification-channels/test', []);
+    }
+
+    // -------------------------------------------------------------------------
     // Export
     // -------------------------------------------------------------------------
 
@@ -833,6 +919,42 @@ class Client
     public function restoreConsent(): void
     {
         $this->doDelete('/api/v1/me/object');
+    }
+
+    // -------------------------------------------------------------------------
+    // Retention & Purge
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get current retention policy.
+     */
+    public function getRetentionPolicy(): array
+    {
+        return $this->get('/api/v1/retention');
+    }
+
+    /**
+     * Update retention policy.
+     */
+    public function updateRetentionPolicy(array $policy): array
+    {
+        return $this->patch('/api/v1/retention', $policy);
+    }
+
+    /**
+     * Preview a purge operation.
+     */
+    public function previewPurge(array $params): array
+    {
+        return $this->post('/api/v1/purge/preview', $params);
+    }
+
+    /**
+     * Execute a purge operation.
+     */
+    public function purgeData(array $params): array
+    {
+        return $this->post('/api/v1/purge', $params);
     }
 
     // -------------------------------------------------------------------------
