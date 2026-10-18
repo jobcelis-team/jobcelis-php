@@ -368,3 +368,7 @@ http_response_code(200);
 ## License
 
 BSL-1.1 (Business Source License)
+
+## Releasing
+
+Bump the version in `VERSION` and merge to `main`. The [Release workflow](.github/workflows/release.yml) publishes it to Packagist (through the `vX.Y.Z` tag) and tags the commit. Changes that do not bump the version publish nothing.
