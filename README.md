@@ -371,4 +371,4 @@ BSL-1.1 (Business Source License)
 
 ## Releasing
 
-Bump the version in `VERSION` and merge to `main`. The [Release workflow](.github/workflows/release.yml) publishes it to Packagist (through the `vX.Y.Z` tag) and tags the commit. Changes that do not bump the version publish nothing.
+Merge to `main`: the [Release workflow](.github/workflows/release.yml) publishes every change to the package as the next patch version (1.3.1 → 1.3.2) to Packagist (through the `vX.Y.Z` tag), writes the version into `VERSION` and tags the commit. Changes to docs, tests or CI publish nothing. For a minor or major version, raise it in `VERSION` in the same pull request. Every pull request runs [CI](.github/workflows/ci.yml).
