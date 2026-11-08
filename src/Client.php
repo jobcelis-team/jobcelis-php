@@ -11,24 +11,53 @@ namespace Jobcelis;
  */
 class Client
 {
+    /** Responses that mean the request was not processed and can be sent again. */
+    private const RETRYABLE_STATUSES = [429, 502, 503, 504];
+
+    /** cURL errors for connection, DNS, TLS and timeout failures. */
+    private const NETWORK_ERRORS = [
+        CURLE_COULDNT_RESOLVE_PROXY,
+        CURLE_COULDNT_RESOLVE_HOST,
+        CURLE_COULDNT_CONNECT,
+        CURLE_PARTIAL_FILE,
+        CURLE_OPERATION_TIMEDOUT,
+        CURLE_SSL_CONNECT_ERROR,
+        CURLE_GOT_NOTHING,
+        CURLE_SEND_ERROR,
+        CURLE_RECV_ERROR,
+    ];
+
+    private const MAX_BACKOFF = 30.0;
+    private const MAX_RETRY_AFTER = 60.0;
+
     private string $apiKey;
     private string $baseUrl;
     private int $timeout;
+    private int $maxRetries;
+    private float $retryBaseDelay;
     private ?string $authToken = null;
 
     /**
-     * @param string $apiKey   Your Jobcelis API key.
-     * @param string $baseUrl  Base URL of the Jobcelis API (default: https://jobcelis.com).
-     * @param int    $timeout  Request timeout in seconds (default: 30).
+     * @param string $apiKey         Your Jobcelis API key.
+     * @param string $baseUrl        Base URL of the Jobcelis API (default: https://jobcelis.com).
+     * @param int    $timeout        Request timeout in seconds (default: 30).
+     * @param int    $maxRetries     Retries for network errors and 429/502/503/504 responses
+     *                               (default: 6, about 60 s in total). 0 disables retries.
+     * @param float  $retryBaseDelay Delay in seconds before the first retry, doubled on each
+     *                               following one up to 30 s (default: 1.0).
      */
     public function __construct(
         string $apiKey,
         string $baseUrl = 'https://jobcelis.com',
         int $timeout = 30,
+        int $maxRetries = 6,
+        float $retryBaseDelay = 1.0,
     ) {
         $this->apiKey = $apiKey;
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->timeout = $timeout;
+        $this->maxRetries = max(0, $maxRetries);
+        $this->retryBaseDelay = $retryBaseDelay;
     }
 
     // -------------------------------------------------------------------------
@@ -93,18 +122,30 @@ class Client
 
     /**
      * Send a single event.
+     *
+     * The request carries an X-Idempotency-Key header so it can be retried safely:
+     * $extra['idempotency_key'] when given, otherwise a generated UUID.
      */
     public function sendEvent(string $topic, array $payload, array $extra = []): array
     {
         $body = array_merge(['topic' => $topic, 'payload' => $payload], $extra);
-        return $this->post('/api/v1/events', $body);
+        $key = (string) ($extra['idempotency_key'] ?? self::uuid4());
+        return $this->request('POST', '/api/v1/events', body: $body, idempotencyKey: $key);
     }
 
     /**
      * Send up to 1000 events in a batch.
+     *
+     * Events without an idempotency_key get a generated one so the batch can be retried safely.
      */
     public function sendEvents(array $events): array
     {
+        $events = array_map(
+            fn ($event) => is_array($event) && !array_key_exists('idempotency_key', $event)
+                ? $event + ['idempotency_key' => self::uuid4()]
+                : $event,
+            $events,
+        );
         return $this->post('/api/v1/events/batch', ['events' => $events]);
     }
 
@@ -1022,59 +1063,26 @@ class Client
      */
     private function publicPost(string $path, array $body): array
     {
-        $url = $this->baseUrl . $path;
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ];
 
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $this->timeout,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($body),
-            CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'Accept: application/json',
-            ],
-        ]);
+        [$statusCode, $response] = $this->send('POST', $this->baseUrl . $path, $headers, json_encode($body), false);
 
-        $response = curl_exec($ch);
-        $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-
-        if ($curlError !== '') {
-            throw new JobcelisException(0, "cURL error: {$curlError}");
-        }
-
-        if ($statusCode === 204) {
-            return [];
-        }
-
-        if ($statusCode >= 400) {
-            $detail = json_decode((string) $response, true);
-            if ($detail === null) {
-                $detail = (string) $response;
-            }
-            $errorMsg = is_array($detail) ? ($detail['error'] ?? $detail) : $detail;
-            throw new JobcelisException($statusCode, $errorMsg);
-        }
-
-        return json_decode((string) $response, true) ?? [];
+        return $this->decodeResponse($statusCode, $response);
     }
 
     /**
      * Core request method using cURL.
      */
-    private function request(string $method, string $path, array $params = [], ?array $body = null): array
-    {
-        $url = $this->baseUrl . $path;
-
-        // Filter out null params and build query string
-        $params = array_filter($params, fn ($v) => $v !== null);
-        if (!empty($params)) {
-            $url .= '?' . http_build_query($params);
-        }
-
+    private function request(
+        string $method,
+        string $path,
+        array $params = [],
+        ?array $body = null,
+        ?string $idempotencyKey = null,
+    ): array {
         $headers = [
             'Content-Type: application/json',
             'Accept: application/json',
@@ -1085,42 +1093,19 @@ class Client
             $headers[] = 'Authorization: Bearer ' . $this->authToken;
         }
 
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $this->timeout,
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_HTTPHEADER => $headers,
-        ]);
+        if ($idempotencyKey !== null) {
+            $headers[] = 'X-Idempotency-Key: ' . $idempotencyKey;
+        }
 
+        $payload = null;
         if ($body !== null && in_array($method, ['POST', 'PATCH', 'PUT'], true)) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+            $payload = json_encode($body);
         }
 
-        $response = curl_exec($ch);
-        $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+        $idempotent = $method !== 'POST' || $idempotencyKey !== null;
+        [$statusCode, $response] = $this->send($method, $this->buildUrl($path, $params), $headers, $payload, $idempotent);
 
-        if ($curlError !== '') {
-            throw new JobcelisException(0, "cURL error: {$curlError}");
-        }
-
-        if ($statusCode === 204) {
-            return [];
-        }
-
-        if ($statusCode >= 400) {
-            $detail = json_decode((string) $response, true);
-            if ($detail === null) {
-                $detail = (string) $response;
-            }
-            $errorMsg = is_array($detail) ? ($detail['error'] ?? $detail) : $detail;
-            throw new JobcelisException($statusCode, $errorMsg);
-        }
-
-        return json_decode((string) $response, true) ?? [];
+        return $this->decodeResponse($statusCode, $response);
     }
 
     /**
@@ -1128,13 +1113,6 @@ class Client
      */
     private function requestRaw(string $method, string $path, array $params = []): string
     {
-        $url = $this->baseUrl . $path;
-
-        $params = array_filter($params, fn ($v) => $v !== null);
-        if (!empty($params)) {
-            $url .= '?' . http_build_query($params);
-        }
-
         $headers = [
             'X-Api-Key: ' . $this->apiKey,
         ];
@@ -1143,33 +1121,155 @@ class Client
             $headers[] = 'Authorization: Bearer ' . $this->authToken;
         }
 
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $this->timeout,
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_HTTPHEADER => $headers,
-        ]);
+        [$statusCode, $response] = $this->send($method, $this->buildUrl($path, $params), $headers, null, $method !== 'POST');
 
-        $response = curl_exec($ch);
-        $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+        if ($statusCode >= 400) {
+            $this->throwError($statusCode, $response);
+        }
 
-        if ($curlError !== '') {
-            throw new JobcelisException(0, "cURL error: {$curlError}");
+        return $response;
+    }
+
+    private function buildUrl(string $path, array $params): string
+    {
+        $url = $this->baseUrl . $path;
+
+        // Filter out null params and build query string
+        $params = array_filter($params, fn ($v) => $v !== null);
+        if (!empty($params)) {
+            $url .= '?' . http_build_query($params);
+        }
+
+        return $url;
+    }
+
+    /**
+     * Sends the request, retrying network errors and 429/502/503/504 responses with
+     * exponential backoff. Network errors are only retried when the request is
+     * idempotent (not a POST, or a POST with an idempotency key), so a request can
+     * never be applied twice.
+     *
+     * @return array{0: int, 1: string} Status code and response body.
+     * @throws JobcelisException On a network error that is not (or no longer) retried.
+     */
+    private function send(string $method, string $url, array $headers, ?string $body, bool $idempotent): array
+    {
+        for ($attempt = 1; ; $attempt++) {
+            $retryAfter = null;
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => $this->timeout,
+                CURLOPT_CUSTOMREQUEST => $method,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$retryAfter): int {
+                    if (stripos($line, 'Retry-After:') === 0) {
+                        $retryAfter = trim(substr($line, strlen('Retry-After:')));
+                    }
+                    return strlen($line);
+                },
+            ]);
+
+            if ($body !== null) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            }
+
+            $response = curl_exec($ch);
+            $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErrno = curl_errno($ch);
+            $curlError = curl_error($ch);
+            unset($ch);
+
+            $canRetry = $attempt <= $this->maxRetries;
+
+            if ($curlErrno !== 0) {
+                if (!$canRetry || !$idempotent || !in_array($curlErrno, self::NETWORK_ERRORS, true)) {
+                    throw new JobcelisException(0, "cURL error: {$curlError}");
+                }
+                $this->sleep($this->backoffDelay($attempt));
+                continue;
+            }
+
+            if (!$canRetry || !in_array($statusCode, self::RETRYABLE_STATUSES, true)) {
+                return [$statusCode, (string) $response];
+            }
+
+            $this->sleep(self::parseRetryAfter($retryAfter) ?? $this->backoffDelay($attempt));
+        }
+    }
+
+    /**
+     * Delay in seconds before retry number $attempt (1-based):
+     * base * 2^(attempt-1), capped at 30 s, with +/-20% jitter.
+     */
+    private function backoffDelay(int $attempt): float
+    {
+        $delay = min($this->retryBaseDelay * (2 ** ($attempt - 1)), self::MAX_BACKOFF);
+        return $delay * (0.8 + mt_rand() / mt_getrandmax() * 0.4);
+    }
+
+    /**
+     * Seconds to wait from a Retry-After header (seconds or HTTP date), capped at 60 s.
+     */
+    private static function parseRetryAfter(?string $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            $seconds = (float) $value;
+        } else {
+            $time = strtotime($value);
+            if ($time === false) {
+                return null;
+            }
+            $seconds = $time - time();
+        }
+
+        return max(0.0, min((float) $seconds, self::MAX_RETRY_AFTER));
+    }
+
+    private function sleep(float $seconds): void
+    {
+        if ($seconds > 0) {
+            usleep((int) round($seconds * 1_000_000));
+        }
+    }
+
+    private function decodeResponse(int $statusCode, string $response): array
+    {
+        if ($statusCode === 204) {
+            return [];
         }
 
         if ($statusCode >= 400) {
-            $detail = json_decode((string) $response, true);
-            if ($detail === null) {
-                $detail = (string) $response;
-            }
-            $errorMsg = is_array($detail) ? ($detail['error'] ?? $detail) : $detail;
-            throw new JobcelisException($statusCode, $errorMsg);
+            $this->throwError($statusCode, $response);
         }
 
-        return (string) $response;
+        return json_decode($response, true) ?? [];
+    }
+
+    private function throwError(int $statusCode, string $response): never
+    {
+        $detail = json_decode($response, true);
+        if ($detail === null) {
+            $detail = $response;
+        }
+        $errorMsg = is_array($detail) ? ($detail['error'] ?? $detail) : $detail;
+        throw new JobcelisException($statusCode, $errorMsg);
+    }
+
+    /**
+     * Random (version 4) UUID.
+     */
+    private static function uuid4(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }
 }
