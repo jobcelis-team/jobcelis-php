@@ -23,4 +23,10 @@ jobs:
         run: composer validate
 
       - name: Lint
-        run: for f in src/*.php; do php -l "$f"; done
+        run: for f in src/*.php tests/*.php tests/Fixtures/*.php; do php -l "$f"; done
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Test
+        run: vendor/bin/phpunit
