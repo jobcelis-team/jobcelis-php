@@ -167,7 +167,7 @@ $client->deletePipeline('pipe_abc123');
 // Test a pipeline with a sample payload
 $result = $client->testPipeline('pipe_abc123', [
     'topic' => 'order.created',
-    'payload' => ['id' => '1'],
+    'id' => '1',
 ]);
 ```
 
@@ -308,7 +308,7 @@ $client->acceptConsent('marketing');
 $myData = $client->exportMyData();
 
 // Processing restrictions
-$client->restrictProcessing();
+$client->restrictProcessing('your-account-password');
 $client->liftRestriction();
 
 // Right to object
@@ -320,7 +320,7 @@ $client->restoreConsent();
 
 ```php
 $health = $client->health();
-$status = $client->status();
+$status = $client->status(); // same JSON as health()
 ```
 
 ## Error Handling

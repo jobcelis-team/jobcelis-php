@@ -154,7 +154,7 @@ class Client
      */
     public function getEvent(string $eventId): array
     {
-        return $this->get("/api/v1/events/{$eventId}");
+        return $this->get("/api/v1/events/{$this->seg($eventId)}");
     }
 
     /**
@@ -170,7 +170,7 @@ class Client
      */
     public function deleteEvent(string $eventId): void
     {
-        $this->doDelete("/api/v1/events/{$eventId}");
+        $this->doDelete("/api/v1/events/{$this->seg($eventId)}");
     }
 
     // -------------------------------------------------------------------------
@@ -213,7 +213,7 @@ class Client
      */
     public function getWebhook(string $webhookId): array
     {
-        return $this->get("/api/v1/webhooks/{$webhookId}");
+        return $this->get("/api/v1/webhooks/{$this->seg($webhookId)}");
     }
 
     /**
@@ -236,7 +236,7 @@ class Client
         if ($rateLimit !== null) {
             $data['rate_limit'] = $rateLimit;
         }
-        return $this->patch("/api/v1/webhooks/{$webhookId}", $data);
+        return $this->patch("/api/v1/webhooks/{$this->seg($webhookId)}", $data);
     }
 
     /**
@@ -244,7 +244,7 @@ class Client
      */
     public function deleteWebhook(string $webhookId): void
     {
-        $this->doDelete("/api/v1/webhooks/{$webhookId}");
+        $this->doDelete("/api/v1/webhooks/{$this->seg($webhookId)}");
     }
 
     /**
@@ -252,7 +252,7 @@ class Client
      */
     public function webhookHealth(string $webhookId): array
     {
-        return $this->get("/api/v1/webhooks/{$webhookId}/health");
+        return $this->get("/api/v1/webhooks/{$this->seg($webhookId)}/health");
     }
 
     /**
@@ -268,7 +268,7 @@ class Client
      */
     public function testWebhook(string $webhookId): array
     {
-        return $this->post("/api/v1/webhooks/{$webhookId}/test", []);
+        return $this->post("/api/v1/webhooks/{$this->seg($webhookId)}/test", []);
     }
 
     // -------------------------------------------------------------------------
@@ -289,7 +289,7 @@ class Client
      */
     public function retryDelivery(string $deliveryId): void
     {
-        $this->post("/api/v1/deliveries/{$deliveryId}/retry", []);
+        $this->post("/api/v1/deliveries/{$this->seg($deliveryId)}/retry", []);
     }
 
     // -------------------------------------------------------------------------
@@ -309,7 +309,7 @@ class Client
      */
     public function getDeadLetter(string $deadLetterId): array
     {
-        return $this->get("/api/v1/dead-letters/{$deadLetterId}");
+        return $this->get("/api/v1/dead-letters/{$this->seg($deadLetterId)}");
     }
 
     /**
@@ -317,7 +317,7 @@ class Client
      */
     public function retryDeadLetter(string $deadLetterId): void
     {
-        $this->post("/api/v1/dead-letters/{$deadLetterId}/retry", []);
+        $this->post("/api/v1/dead-letters/{$this->seg($deadLetterId)}/retry", []);
     }
 
     /**
@@ -325,7 +325,7 @@ class Client
      */
     public function resolveDeadLetter(string $deadLetterId): void
     {
-        $this->patch("/api/v1/dead-letters/{$deadLetterId}/resolve", []);
+        $this->patch("/api/v1/dead-letters/{$this->seg($deadLetterId)}/resolve", []);
     }
 
     // -------------------------------------------------------------------------
@@ -357,7 +357,7 @@ class Client
      */
     public function getReplay(string $replayId): array
     {
-        return $this->get("/api/v1/replays/{$replayId}");
+        return $this->get("/api/v1/replays/{$this->seg($replayId)}");
     }
 
     /**
@@ -365,7 +365,7 @@ class Client
      */
     public function cancelReplay(string $replayId): void
     {
-        $this->doDelete("/api/v1/replays/{$replayId}");
+        $this->doDelete("/api/v1/replays/{$this->seg($replayId)}");
     }
 
     // -------------------------------------------------------------------------
@@ -398,7 +398,7 @@ class Client
      */
     public function getJob(string $jobId): array
     {
-        return $this->get("/api/v1/jobs/{$jobId}");
+        return $this->get("/api/v1/jobs/{$this->seg($jobId)}");
     }
 
     /**
@@ -406,7 +406,7 @@ class Client
      */
     public function updateJob(string $jobId, array $data): array
     {
-        return $this->patch("/api/v1/jobs/{$jobId}", $data);
+        return $this->patch("/api/v1/jobs/{$this->seg($jobId)}", $data);
     }
 
     /**
@@ -414,7 +414,7 @@ class Client
      */
     public function deleteJob(string $jobId): void
     {
-        $this->doDelete("/api/v1/jobs/{$jobId}");
+        $this->doDelete("/api/v1/jobs/{$this->seg($jobId)}");
     }
 
     /**
@@ -422,7 +422,7 @@ class Client
      */
     public function listJobRuns(string $jobId, int $limit = 50): array
     {
-        return $this->get("/api/v1/jobs/{$jobId}/runs", ['limit' => $limit]);
+        return $this->get("/api/v1/jobs/{$this->seg($jobId)}/runs", ['limit' => $limit]);
     }
 
     /**
@@ -466,7 +466,7 @@ class Client
      */
     public function getPipeline(string $pipelineId): array
     {
-        return $this->get("/api/v1/pipelines/{$pipelineId}");
+        return $this->get("/api/v1/pipelines/{$this->seg($pipelineId)}");
     }
 
     /**
@@ -474,7 +474,7 @@ class Client
      */
     public function updatePipeline(string $pipelineId, array $data): array
     {
-        return $this->patch("/api/v1/pipelines/{$pipelineId}", $data);
+        return $this->patch("/api/v1/pipelines/{$this->seg($pipelineId)}", $data);
     }
 
     /**
@@ -482,7 +482,7 @@ class Client
      */
     public function deletePipeline(string $pipelineId): void
     {
-        $this->doDelete("/api/v1/pipelines/{$pipelineId}");
+        $this->doDelete("/api/v1/pipelines/{$this->seg($pipelineId)}");
     }
 
     /**
@@ -490,7 +490,7 @@ class Client
      */
     public function testPipeline(string $pipelineId, array $payload): array
     {
-        return $this->post("/api/v1/pipelines/{$pipelineId}/test", $payload);
+        return $this->post("/api/v1/pipelines/{$this->seg($pipelineId)}/test", ['payload' => $payload]);
     }
 
     // -------------------------------------------------------------------------
@@ -519,7 +519,7 @@ class Client
      */
     public function getEventSchema(string $schemaId): array
     {
-        return $this->get("/api/v1/event-schemas/{$schemaId}");
+        return $this->get("/api/v1/event-schemas/{$this->seg($schemaId)}");
     }
 
     /**
@@ -527,7 +527,7 @@ class Client
      */
     public function updateEventSchema(string $schemaId, array $data): array
     {
-        return $this->patch("/api/v1/event-schemas/{$schemaId}", $data);
+        return $this->patch("/api/v1/event-schemas/{$this->seg($schemaId)}", $data);
     }
 
     /**
@@ -535,7 +535,7 @@ class Client
      */
     public function deleteEventSchema(string $schemaId): void
     {
-        $this->doDelete("/api/v1/event-schemas/{$schemaId}");
+        $this->doDelete("/api/v1/event-schemas/{$this->seg($schemaId)}");
     }
 
     /**
@@ -578,7 +578,7 @@ class Client
      */
     public function deleteSandboxEndpoint(string $endpointId): void
     {
-        $this->doDelete("/api/v1/sandbox-endpoints/{$endpointId}");
+        $this->doDelete("/api/v1/sandbox-endpoints/{$this->seg($endpointId)}");
     }
 
     /**
@@ -586,7 +586,7 @@ class Client
      */
     public function listSandboxRequests(string $endpointId, int $limit = 50): array
     {
-        return $this->get("/api/v1/sandbox-endpoints/{$endpointId}/requests", ['limit' => $limit]);
+        return $this->get("/api/v1/sandbox-endpoints/{$this->seg($endpointId)}/requests", ['limit' => $limit]);
     }
 
     // -------------------------------------------------------------------------
@@ -710,7 +710,7 @@ class Client
      */
     public function getProjectById(string $projectId): array
     {
-        return $this->get("/api/v1/projects/{$projectId}");
+        return $this->get("/api/v1/projects/{$this->seg($projectId)}");
     }
 
     /**
@@ -718,7 +718,7 @@ class Client
      */
     public function updateProjectById(string $projectId, array $data): array
     {
-        return $this->patch("/api/v1/projects/{$projectId}", $data);
+        return $this->patch("/api/v1/projects/{$this->seg($projectId)}", $data);
     }
 
     /**
@@ -726,7 +726,7 @@ class Client
      */
     public function deleteProject(string $projectId): void
     {
-        $this->doDelete("/api/v1/projects/{$projectId}");
+        $this->doDelete("/api/v1/projects/{$this->seg($projectId)}");
     }
 
     /**
@@ -734,7 +734,7 @@ class Client
      */
     public function setDefaultProject(string $projectId): array
     {
-        return $this->patch("/api/v1/projects/{$projectId}/default", []);
+        return $this->patch("/api/v1/projects/{$this->seg($projectId)}/default", []);
     }
 
     // -------------------------------------------------------------------------
@@ -746,15 +746,15 @@ class Client
      */
     public function listMembers(string $projectId): array
     {
-        return $this->get("/api/v1/projects/{$projectId}/members");
+        return $this->get("/api/v1/projects/{$this->seg($projectId)}/members");
     }
 
     /**
      * Add a member to a project.
      */
-    public function addMember(string $projectId, string $email, string $role = 'member'): array
+    public function addMember(string $projectId, string $email, string $role = 'viewer'): array
     {
-        return $this->post("/api/v1/projects/{$projectId}/members", [
+        return $this->post("/api/v1/projects/{$this->seg($projectId)}/members", [
             'email' => $email,
             'role' => $role,
         ]);
@@ -765,7 +765,7 @@ class Client
      */
     public function updateMember(string $projectId, string $memberId, string $role): array
     {
-        return $this->patch("/api/v1/projects/{$projectId}/members/{$memberId}", [
+        return $this->patch("/api/v1/projects/{$this->seg($projectId)}/members/{$this->seg($memberId)}", [
             'role' => $role,
         ]);
     }
@@ -775,7 +775,7 @@ class Client
      */
     public function removeMember(string $projectId, string $memberId): void
     {
-        $this->doDelete("/api/v1/projects/{$projectId}/members/{$memberId}");
+        $this->doDelete("/api/v1/projects/{$this->seg($projectId)}/members/{$this->seg($memberId)}");
     }
 
     // -------------------------------------------------------------------------
@@ -795,7 +795,7 @@ class Client
      */
     public function acceptInvitation(string $invitationId): array
     {
-        return $this->post("/api/v1/invitations/{$invitationId}/accept", []);
+        return $this->post("/api/v1/invitations/{$this->seg($invitationId)}/accept", []);
     }
 
     /**
@@ -803,7 +803,7 @@ class Client
      */
     public function rejectInvitation(string $invitationId): array
     {
-        return $this->post("/api/v1/invitations/{$invitationId}/reject", []);
+        return $this->post("/api/v1/invitations/{$this->seg($invitationId)}/reject", []);
     }
 
     // -------------------------------------------------------------------------
@@ -843,7 +843,7 @@ class Client
      */
     public function revokeEmbedToken(string $id): void
     {
-        $this->doDelete("/api/v1/embed/tokens/{$id}");
+        $this->doDelete("/api/v1/embed/tokens/{$this->seg($id)}");
     }
 
     // -------------------------------------------------------------------------
@@ -935,7 +935,7 @@ class Client
      */
     public function acceptConsent(string $purpose): array
     {
-        return $this->post("/api/v1/me/consents/{$purpose}/accept", []);
+        return $this->post("/api/v1/me/consents/{$this->seg($purpose)}/accept", []);
     }
 
     /**
@@ -947,11 +947,12 @@ class Client
     }
 
     /**
-     * Request restriction of data processing.
+     * Request restriction of data processing. The server asks for the account
+     * password to confirm it.
      */
-    public function restrictProcessing(): array
+    public function restrictProcessing(string $password): array
     {
-        return $this->post('/api/v1/me/restrict', []);
+        return $this->post('/api/v1/me/restrict', ['password' => $password]);
     }
 
     /**
@@ -995,7 +996,7 @@ class Client
      */
     public function updateRetentionPolicy(array $policy): array
     {
-        return $this->patch('/api/v1/retention', $policy);
+        return $this->patch('/api/v1/retention', ['retention_policy' => $policy]);
     }
 
     /**
@@ -1027,11 +1028,12 @@ class Client
     }
 
     /**
-     * Get platform status page.
+     * Get platform status. Same as health(): /status is an HTML page, so this
+     * reads the JSON /health endpoint.
      */
     public function status(): array
     {
-        return $this->get('/status');
+        return $this->get('/health');
     }
 
     // =========================================================================
@@ -1128,6 +1130,14 @@ class Client
         }
 
         return $response;
+    }
+
+    /**
+     * Percent-encodes a value used as one path segment.
+     */
+    private function seg(string $value): string
+    {
+        return rawurlencode($value);
     }
 
     private function buildUrl(string $path, array $params): string
